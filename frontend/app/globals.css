@@ -1,0 +1,301 @@
+:root {
+  color-scheme: dark;
+  --bg: #11120f;
+  --panel: #191b17;
+  --panel-strong: #20231e;
+  --line: #34382f;
+  --text: #f5f3ea;
+  --muted: #b9b4a6;
+  --green: #58c799;
+  --blue: #79aee8;
+  --amber: #e5a23d;
+  --red: #e07b5f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+}
+
+.sidebar {
+  border-right: 1px solid var(--line);
+  padding: 24px 18px;
+  background: #151713;
+}
+
+.brand {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 28px;
+}
+
+.brand strong {
+  font-size: 18px;
+}
+
+.brand span,
+.muted {
+  color: var(--muted);
+}
+
+.nav {
+  display: grid;
+  gap: 8px;
+}
+
+.nav a {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 10px 12px;
+  border-radius: 7px;
+}
+
+.nav a.active,
+.nav a:hover {
+  color: var(--text);
+  background: var(--panel-strong);
+}
+
+.main {
+  padding: 24px;
+}
+
+.topbar,
+.grid,
+.quiz-layout,
+.cards,
+.list {
+  display: grid;
+  gap: 16px;
+}
+
+.topbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  margin-bottom: 18px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 8px;
+  font-size: 30px;
+}
+
+h2 {
+  font-size: 18px;
+  margin-bottom: 14px;
+}
+
+h3 {
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+
+.score,
+.card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 18px;
+}
+
+.score {
+  min-width: 156px;
+}
+
+.score strong,
+.metric strong {
+  display: block;
+  font-size: 34px;
+}
+
+.grid {
+  grid-template-columns: repeat(12, 1fr);
+}
+
+.span-4 {
+  grid-column: span 4;
+}
+
+.span-8 {
+  grid-column: span 8;
+}
+
+.span-12 {
+  grid-column: span 12;
+}
+
+.metric {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.topic-row {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr) 48px;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.bar {
+  height: 12px;
+  border-radius: 999px;
+  background: #2b2f28;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  border-radius: inherit;
+}
+
+.risk-low {
+  background: var(--green);
+}
+
+.risk-medium {
+  background: var(--amber);
+}
+
+.risk-high {
+  background: var(--red);
+}
+
+.list-item {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 12px;
+  background: var(--panel-strong);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #12130f;
+  background: var(--blue);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.quiz-layout {
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+}
+
+.choice {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 13px 14px;
+  margin-bottom: 10px;
+  color: var(--text);
+  background: var(--panel-strong);
+  text-align: left;
+}
+
+.choice.selected {
+  border-color: var(--blue);
+  outline: 2px solid rgba(121, 174, 232, 0.25);
+}
+
+.primary {
+  border: 0;
+  border-radius: 7px;
+  padding: 12px 15px;
+  color: #11120f;
+  background: var(--green);
+  font-weight: 700;
+}
+
+.primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.feedback {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 7px;
+  background: #252920;
+  border: 1px solid var(--line);
+}
+
+.tutor-form {
+  display: grid;
+  gap: 10px;
+}
+
+textarea,
+input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 12px;
+  color: var(--text);
+  background: var(--panel-strong);
+}
+
+textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+@media (max-width: 900px) {
+  .shell,
+  .quiz-layout,
+  .topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .span-4,
+  .span-8,
+  .span-12 {
+    grid-column: span 12;
+  }
+
+  .topic-row {
+    grid-template-columns: 1fr;
+  }
+}
