@@ -165,17 +165,6 @@ async def mastery_trend(
     )
     rows = res.all()
 
-    # Also get study minutes per day
-    mins_res = await db.execute(
-        select(
-            func.cast(func.date(func.cast(MasterySnapshot.recorded_at, func.Date())), func.String()).label("day"),
-            func.sum(func.literal(0)).label("mins"),  # placeholder - join with sessions
-        )
-        .where(MasterySnapshot.user_id == current_user.id,
-               MasterySnapshot.recorded_at >= since)
-        .group_by(func.date(MasterySnapshot.recorded_at))
-    )
-
     return [
         MasteryTrend(
             date=str(r.day),
@@ -306,4 +295,3 @@ async def subjects(
         .order_by(Topic.subject)
     )
     return [{"subject": r.subject, "topic_count": r.topic_count} for r in res.all()]
-
