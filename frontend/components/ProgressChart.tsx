@@ -1,92 +1,93 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine
+  Tooltip, ResponsiveContainer, ReferenceLine,
 } from "recharts";
 import { TrendingUp, TrendingDown } from "lucide-react";
-import { analytics } from "@/lib/api";
 import type { MasteryTrend } from "@/lib/api";
 
-export default function ProgressChart({ data: initialData }: { data?: MasteryTrend[] }) {
-  const [data, setData] = useState<MasteryTrend[]>(initialData ?? []);
+export default function ProgressChart({
+  data,
+  fullHeight = false,
+}: {
+  data: MasteryTrend[];
+  fullHeight?: boolean;
+}) {
   const [range, setRange] = useState<7 | 14 | 30>(30);
-  const [loading, setLoading] = useState(!initialData);
 
-  useEffect(() => {
-    if (!initialData) {
-      setLoading(true);
-      analytics.masteryTrend(range)
-        .then(setData)
-        .finally(() => setLoading(false));
-    }
-  }, [range]);
-
-  const formattedData = data.map((d) => ({
+  const sliced = data.slice(-range);
+  const formatted = sliced.map(d => ({
     ...d,
     label: new Date(d.date).toLocaleDateString("en-IN", { month: "short", day: "numeric" }),
     pct: Math.round(d.avg_mastery * 100),
+    mins: d.study_minutes ?? 0,
   }));
 
-  const first = formattedData[0]?.pct ?? 0;
-  const last  = formattedData[formattedData.length - 1]?.pct ?? 0;
+  const first = formatted[0]?.pct ?? 0;
+  const last  = formatted[formatted.length - 1]?.pct ?? 0;
   const delta = last - first;
-  const trend = delta >= 0 ? "up" : "down";
+  const h = fullHeight ? 260 : 180;
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     return (
       <div style={{
-        background: "var(--bg-2)", border: "1px solid var(--border)",
-        borderRadius: "var(--radius-sm)", padding: "10px 14px",
-        fontSize: 12, fontFamily: "var(--font-display)",
+        background: "var(--raised)", border: "1px solid var(--line-hover)",
+        borderRadius: "var(--r-md)", padding: "10px 14px",
+        fontFamily: "var(--sans)", fontSize: 12,
+        boxShadow: "var(--shadow-lg)",
       }}>
-        <div style={{ color: "var(--text-muted)", marginBottom: 4 }}>{label}</div>
-        <div style={{ color: "var(--accent-bright)", fontWeight: 700, fontSize: 16, fontFamily: "var(--font-mono)" }}>
-          {payload[0].value}%
-        </div>
-        <div style={{ color: "var(--text-muted)", fontSize: 11, marginTop: 2 }}>
-          {payload[0].payload.topics_covered} topics studied
+        <div style={{ color: "var(--t3)", marginBottom: 6 }}>{label}</div>
+        <div style={{ display: "flex", gap: 16 }}>
+          <div>
+            <div style={{ color: "var(--phosphor)", fontWeight: 700, fontSize: 18, fontFamily: "var(--mono)" }}>
+              {payload[0].value}%
+            </div>
+            <div style={{ color: "var(--t3)", fontSize: 10 }}>mastery</div>
+          </div>
+          {payload[0].payload.mins > 0 && (
+            <div>
+              <div style={{ color: "var(--solar)", fontWeight: 700, fontSize: 18, fontFamily: "var(--mono)" }}>
+                {payload[0].payload.mins}m
+              </div>
+              <div style={{ color: "var(--t3)", fontSize: 10 }}>studied</div>
+            </div>
+          )}
         </div>
       </div>
     );
   };
 
   return (
-    <div className="card" style={{ padding: 24 }}>
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+    <div className="card" style={{ padding: 22 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
         <div>
-          <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          <p style={{ fontSize: 11, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
             Mastery Progress
-          </h3>
+          </p>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-            <span style={{ fontSize: 32, fontWeight: 800, fontFamily: "var(--font-mono)", color: "var(--text-primary)" }}>
+            <span style={{ fontSize: 28, fontWeight: 800, fontFamily: "var(--mono)", color: "var(--t1)" }}>
               {last}%
             </span>
-            <span style={{
-              display: "flex", alignItems: "center", gap: 4,
-              fontSize: 13, fontWeight: 600,
-              color: trend === "up" ? "var(--success)" : "var(--danger)",
-            }}>
-              {trend === "up" ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-              {Math.abs(delta)}% vs start
+            <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13, fontWeight: 600, color: delta >= 0 ? "var(--correct)" : "var(--wrong)" }}>
+              {delta >= 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+              {Math.abs(delta)}%
             </span>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {([7, 14, 30] as const).map((r) => (
+        <div style={{ display: "flex", gap: 4 }}>
+          {([7, 14, 30] as const).map(r => (
             <button
               key={r}
               onClick={() => setRange(r)}
               style={{
-                padding: "4px 10px", borderRadius: 100,
-                fontSize: 11, fontWeight: 600, cursor: "pointer",
-                fontFamily: "var(--font-display)",
-                border: `1px solid ${range === r ? "var(--accent)" : "var(--border)"}`,
-                background: range === r ? "var(--accent-glow)" : "transparent",
-                color: range === r ? "var(--accent-bright)" : "var(--text-muted)",
+                padding: "3px 9px", borderRadius: 100, fontSize: 11, fontWeight: 600,
+                cursor: "pointer", fontFamily: "var(--sans)",
+                border: `1px solid ${range === r ? "var(--phosphor)" : "var(--line)"}`,
+                background: range === r ? "rgba(0,255,136,0.1)" : "transparent",
+                color: range === r ? "var(--phosphor)" : "var(--t3)",
               }}
             >
               {r}d
@@ -95,47 +96,40 @@ export default function ProgressChart({ data: initialData }: { data?: MasteryTre
         </div>
       </div>
 
-      {/* Chart */}
-      {loading ? (
-        <div className="skeleton" style={{ height: 180 }} />
-      ) : formattedData.length < 2 ? (
-        <div style={{ height: 180, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 13 }}>
-          Complete more sessions to see trends
+      {formatted.length < 2 ? (
+        <div style={{ height: h, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--t4)", fontSize: 13 }}>
+          Study more sessions to see trends
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={180}>
-          <AreaChart data={formattedData} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
+        <ResponsiveContainer width="100%" height={h}>
+          <AreaChart data={formatted} margin={{ top: 5, right: 0, bottom: 0, left: -24 }}>
             <defs>
-              <linearGradient id="masteryGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#6c63ff" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#6c63ff" stopOpacity={0} />
+              <linearGradient id="mgGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stopColor="#00ff88" stopOpacity={0.25} />
+                <stop offset="100%" stopColor="#00ff88" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+            <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.03)" vertical={false} />
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 10, fill: "#5c6080", fontFamily: "var(--font-display)" }}
-              axisLine={false}
-              tickLine={false}
+              tick={{ fontSize: 10, fill: "var(--t4)", fontFamily: "var(--sans)" }}
+              axisLine={false} tickLine={false}
               interval="preserveStartEnd"
             />
             <YAxis
               domain={[0, 100]}
-              tick={{ fontSize: 10, fill: "#5c6080", fontFamily: "var(--font-mono)" }}
-              axisLine={false}
-              tickLine={false}
-              tickFormatter={(v) => `${v}%`}
+              tick={{ fontSize: 10, fill: "var(--t4)", fontFamily: "var(--mono)" }}
+              axisLine={false} tickLine={false}
+              tickFormatter={v => `${v}%`}
             />
             <Tooltip content={<CustomTooltip />} />
-            <ReferenceLine y={50} stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
+            <ReferenceLine y={70} stroke="rgba(0,255,136,0.1)" strokeDasharray="4 4" />
             <Area
-              type="monotone"
-              dataKey="pct"
-              stroke="#6c63ff"
-              strokeWidth={2}
-              fill="url(#masteryGrad)"
+              type="monotone" dataKey="pct"
+              stroke="var(--phosphor)" strokeWidth={2}
+              fill="url(#mgGrad)"
               dot={false}
-              activeDot={{ r: 4, fill: "#6c63ff", strokeWidth: 0 }}
+              activeDot={{ r: 4, fill: "var(--phosphor)", strokeWidth: 0 }}
             />
           </AreaChart>
         </ResponsiveContainer>

@@ -193,7 +193,7 @@ async def seed():
             topic_id_map[t["name"]] = tid
             await session.execute(text("""
                 INSERT INTO topics (id, subject, name, difficulty_baseline, exam_targets, weight, order_index)
-                VALUES (:id, :subject, :name, :diff, :exams::jsonb, :weight, 0)
+                VALUES (:id, :subject, :name, :diff, CAST(:exams AS jsonb), :weight, 0)
                 ON CONFLICT DO NOTHING
             """), {
                 "id": tid, "subject": t["subject"], "name": t["name"],
@@ -208,9 +208,9 @@ async def seed():
             await session.execute(text("""
                 INSERT INTO questions
                     (id, topic_id, text, options, correct_answer, explanation,
-                     difficulty, discrimination, question_type)
+                     difficulty, discrimination, question_type, tags)
                 VALUES
-                    (:id, :tid, :text, :opts::jsonb, :ans, :expl, :diff, :disc, :qtype)
+                    (:id, :tid, :text, CAST(:opts AS jsonb), :ans, :expl, :diff, :disc, :qtype, '[]'::jsonb)
                 ON CONFLICT DO NOTHING
             """), {
                 "id": str(uuid.uuid4()), "tid": tid,

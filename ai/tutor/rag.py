@@ -19,6 +19,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db import settings
 
 
+LOCAL_TOPIC_NOTES = {
+    "Physics": "Start by listing known quantities, target quantity, formula, substitution, and unit check.",
+    "Kinematics": "Kinematics describes motion using displacement, velocity, acceleration, and time.",
+    "Newton's Laws of Motion": "Newton's second law says net force equals mass times acceleration: F = ma.",
+    "Thermodynamics": "Thermodynamics connects heat, work, temperature, and internal energy.",
+    "Electrostatics": "Electrostatics studies forces, fields, and potentials due to charges at rest.",
+    "Integration": "Integration accumulates small changes and is often the reverse of differentiation.",
+    "General": "Break the doubt into concept, formula or rule, example, and one practice question.",
+}
+
+
 class RAGTutor:
 
     def __init__(self):
@@ -26,6 +37,47 @@ class RAGTutor:
         self.embedding_model = settings.OPENAI_EMBEDDING_MODEL
         self.chat_model = settings.OPENAI_CHAT_MODEL
         self.top_k = 4  # number of chunks to retrieve
+
+    def _has_real_openai_key(self) -> bool:
+        key = (settings.OPENAI_API_KEY or "").strip()
+        if not key.startswith("sk-"):
+            return False
+        return key != "sk-..." and "placeholder" not in key.lower()
+
+    async def _stream_local_answer(
+        self,
+        question: str,
+        topic: str,
+        context_chunks: Optional[list[str]] = None,
+    ) -> AsyncIterator[str]:
+        topic_note = LOCAL_TOPIC_NOTES.get(topic, LOCAL_TOPIC_NOTES["General"])
+        context_note = ""
+        if context_chunks:
+            context_note = f"\n\nRelevant note from your material: {context_chunks[0][:500]}"
+
+        answer = f"""I can help with this locally. A real OpenAI key is not configured, so I am using the built-in tutor mode.
+
+Topic: {topic}
+
+Core idea:
+{topic_note}
+
+For your question:
+{question}
+
+How to approach it:
+1. Identify what the question is asking.
+2. Write the relevant definition, formula, or rule.
+3. Substitute known values or connect the concept to a simple example.
+4. Check the final answer against units, signs, and assumptions.
+
+Example:
+If this is about Newton's second law, remember that acceleration changes only when there is a net external force. The relation F = ma means a larger force gives larger acceleration, while larger mass makes acceleration smaller for the same force.{context_note}
+
+Follow-up: which exact step feels confusing: the formula, the meaning of the terms, or applying it to a question?"""
+
+        for token in answer.replace("\n", " ").split(" "):
+            yield token + " "
 
     async def embed(self, text_input: str) -> list[float]:
         """Generate embedding vector for a text string."""
@@ -139,8 +191,18 @@ NEVER hallucinate formulas, values, or facts. If uncertain, say you're uncertain
 
         Yields text chunks as they arrive from the LLM.
         """
+        if not self._has_real_openai_key():
+            async for chunk in self._stream_local_answer(question, topic):
+                yield chunk
+            return
+
         # Step 1: Embed the question
-        question_embedding = await self.embed(question)
+        try:
+            question_embedding = await self.embed(question)
+        except Exception:
+            async for chunk in self._stream_local_answer(question, topic):
+                yield chunk
+            return
 
         # Step 2: Retrieve relevant context (only if DB is available)
         context_chunks: list[str] = []
@@ -157,18 +219,22 @@ NEVER hallucinate formulas, values, or facts. If uncertain, say you're uncertain
         system_prompt = self._build_system_prompt(topic, context_chunks, mastery_level)
 
         # Step 4: Stream LLM response
-        stream = await self.client.chat.completions.create(
-            model=self.chat_model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": question},
-            ],
-            max_tokens=1024,
-            temperature=0.7,
-            stream=True,
-        )
+        try:
+            stream = await self.client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": question},
+                ],
+                max_tokens=1024,
+                temperature=0.7,
+                stream=True,
+            )
 
-        async for chunk in stream:
-            delta = chunk.choices[0].delta
-            if delta.content:
-                yield delta.content
+            async for chunk in stream:
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    yield delta.content
+        except Exception:
+            async for chunk in self._stream_local_answer(question, topic, context_chunks):
+                yield chunk

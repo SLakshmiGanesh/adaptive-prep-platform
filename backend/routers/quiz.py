@@ -1,217 +1,259 @@
 """
-routers/quiz.py — Adaptive quiz: IRT question selection + attempt submission
+routers/quiz.py — Adaptive quiz: IRT question selection, BKT update, GATE numerical
 """
 
-import json
-from datetime import date, datetime, timezone
+import json, math
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import get_db, get_redis
 from models.orm import Question, Attempt, MasterySnapshot, Topic, User
-from services.skm import BayesianKT
-from ai.assessment.irt import select_question_irt
 from routers.auth import get_current_user
 
 router = APIRouter()
-kt = BayesianKT()
 
+# ── BKT ───────────────────────────────────────────────────────────────────────
 
-# ── Schemas ────────────────────────────────────────────────────────────────────
+P_LEARN = 0.15
+P_SLIP  = 0.10
+P_GUESS = 0.20
+
+def bkt_update(p_known: float, correct: bool) -> float:
+    p_obs_k  = (1 - P_SLIP)  if correct else P_SLIP
+    p_obs_nk = P_GUESS        if correct else (1 - P_GUESS)
+    numer = p_obs_k * p_known
+    denom = numer + p_obs_nk * (1 - p_known)
+    posterior = numer / denom if denom > 0 else p_known
+    return max(0.0, min(1.0, posterior + (1 - posterior) * P_LEARN))
+
+# ── IRT ───────────────────────────────────────────────────────────────────────
+
+def mastery_to_theta(m: float) -> float:
+    p = max(0.01, min(0.99, m))
+    return max(-3.0, min(3.0, math.log(p / (1 - p))))
+
+def fisher_info(theta: float, a: float, b_diff: float) -> float:
+    b = max(-3.0, min(3.0, math.log(max(0.01, min(0.99, b_diff)) / (1 - max(0.01, min(0.99, b_diff))))))
+    p = 1 / (1 + math.exp(-a * (theta - b)))
+    return a ** 2 * p * (1 - p)
+
+# ── Schemas ───────────────────────────────────────────────────────────────────
 
 class QuestionOut(BaseModel):
     question_id: str
     topic_id: str
     topic_name: str
+    subject: str
     text: str
     options: list[dict]
     difficulty: float
-
+    difficulty_label: str
+    question_type: str   # mcq | numerical | msq
 
 class SubmitBody(BaseModel):
     question_id: str
-    answer: str           # option id e.g. "A" | "B" | "C" | "D"
+    answer: str
     time_taken_sec: int
-    confidence: Optional[int] = None  # 1–5
+    confidence: Optional[int] = None
 
-
-class SubmitResponse(BaseModel):
+class SubmitRes(BaseModel):
     correct: bool
     correct_answer: str
     explanation: Optional[str]
     new_mastery: float
     mastery_delta: float
     xp_gained: int
+    time_rank: str   # fast | normal | slow
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
-class AttemptOut(BaseModel):
-    question_id: str
-    topic_name: str
-    correct: bool
-    time_taken_sec: int
-    attempted_at: str
-
-
-# ── Helpers ────────────────────────────────────────────────────────────────────
-
-async def get_current_mastery(user_id: str, topic_id: str, db: AsyncSession) -> float:
-    """Get most recent mastery snapshot, default to 0.1."""
-    result = await db.execute(
+async def get_mastery(user_id: str, topic_id: str, db: AsyncSession) -> float:
+    res = await db.execute(
         select(MasterySnapshot.mastery)
         .where(MasterySnapshot.user_id == user_id, MasterySnapshot.topic_id == topic_id)
-        .order_by(desc(MasterySnapshot.recorded_at))
-        .limit(1)
+        .order_by(desc(MasterySnapshot.recorded_at)).limit(1)
     )
-    row = result.scalar_one_or_none()
-    return row if row is not None else 0.1
-
+    val = res.scalar_one_or_none()
+    return val if val is not None else 0.10
 
 async def save_mastery(user_id: str, topic_id: str, mastery: float, db: AsyncSession):
-    snapshot = MasterySnapshot(user_id=user_id, topic_id=topic_id, mastery=mastery)
-    db.add(snapshot)
+    db.add(MasterySnapshot(user_id=user_id, topic_id=topic_id, mastery=mastery))
 
+def diff_label(d: float) -> str:
+    if d < 0.33: return "Easy"
+    if d < 0.67: return "Medium"
+    return "Hard"
 
-# ── Endpoints ──────────────────────────────────────────────────────────────────
+def check_numerical(user_ans: str, correct_ans: str, tolerance: float = 0.01) -> bool:
+    """GATE numerical: accept within 1% relative tolerance."""
+    try:
+        u = float(user_ans.strip())
+        c = float(correct_ans.strip())
+        if c == 0:
+            return abs(u) < tolerance
+        return abs(u - c) / abs(c) <= tolerance
+    except (ValueError, ZeroDivisionError):
+        return user_ans.strip().lower() == correct_ans.strip().lower()
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/next", response_model=QuestionOut)
-async def get_next_question(
-    topic_id: str = Query(..., description="UUID of topic to quiz on"),
+async def next_question(
+    topic_id: str = Query(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
 ):
-    # Check Redis cache first
     cache_key = f"quiz:next:{current_user.id}:{topic_id}"
     cached = await redis.get(cache_key)
     if cached:
         return QuestionOut(**json.loads(cached))
 
-    # Get student ability from mastery
-    mastery = await get_current_mastery(current_user.id, topic_id, db)
+    mastery = await get_mastery(current_user.id, topic_id, db)
+    theta   = mastery_to_theta(mastery)
 
-    # Load candidate questions (exclude recently attempted)
-    recent_ids_raw = await redis.lrange(f"recent_q:{current_user.id}", 0, 19)
-    recent_ids = [r for r in recent_ids_raw]
+    # Exclude recently attempted questions
+    recent_raw = await redis.lrange(f"recent_q:{current_user.id}", 0, 29)
 
-    result = await db.execute(
-        select(Question, Topic.name.label("topic_name"))
+    res = await db.execute(
+        select(Question, Topic.name.label("tn"), Topic.subject.label("sub"))
         .join(Topic, Question.topic_id == Topic.id)
         .where(
             Question.topic_id == topic_id,
-            ~Question.id.in_(recent_ids) if recent_ids else True,
+            ~Question.id.in_(recent_raw) if recent_raw else True,
         )
-        .limit(50)
+        .limit(60)
     )
-    rows = result.all()
+    rows = res.all()
 
     if not rows:
-        raise HTTPException(404, "No questions available for this topic")
+        raise HTTPException(404, "No questions available for this topic. Add more questions via the seed script.")
 
     candidates = [
-        {"id": r.Question.id, "difficulty": r.Question.difficulty,
-         "text": r.Question.text, "options": r.Question.options,
-         "topic_name": r.topic_name}
+        {
+            "id": r.Question.id,
+            "text": r.Question.text,
+            "options": r.Question.options,
+            "difficulty": r.Question.difficulty,
+            "discrimination": r.Question.discrimination,
+            "question_type": r.Question.question_type,
+            "topic_name": r.tn,
+            "subject": r.sub,
+        }
         for r in rows
     ]
 
-    selected = select_question_irt(ability=mastery, candidates=candidates)
+    # IRT: pick question maximizing Fisher information at student's theta
+    best = max(candidates, key=lambda q: fisher_info(theta, q["discrimination"], q["difficulty"]))
 
     out = QuestionOut(
-        question_id=selected["id"],
+        question_id=best["id"],
         topic_id=topic_id,
-        topic_name=selected["topic_name"],
-        text=selected["text"],
-        options=[{"id": o["id"], "text": o["text"]} for o in selected["options"]],
-        difficulty=selected["difficulty"],
+        topic_name=best["topic_name"],
+        subject=best["subject"],
+        text=best["text"],
+        options=[{"id": o["id"], "text": o["text"]} for o in (best["options"] or [])],
+        difficulty=best["difficulty"],
+        difficulty_label=diff_label(best["difficulty"]),
+        question_type=best["question_type"],
     )
 
-    # Cache for 30s to prevent double-fetch
     await redis.setex(cache_key, 30, out.model_dump_json())
-
-    # Track recent questions (rolling window of 20)
-    await redis.lpush(f"recent_q:{current_user.id}", selected["id"])
-    await redis.ltrim(f"recent_q:{current_user.id}", 0, 19)
+    await redis.lpush(f"recent_q:{current_user.id}", best["id"])
+    await redis.ltrim(f"recent_q:{current_user.id}", 0, 29)
 
     return out
 
 
-@router.post("/submit", response_model=SubmitResponse)
+@router.post("/submit", response_model=SubmitRes)
 async def submit_answer(
     body: SubmitBody,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis),
 ):
-    # Load question with correct answer
-    result = await db.execute(select(Question).where(Question.id == body.question_id))
-    question = result.scalar_one_or_none()
+    res = await db.execute(select(Question).where(Question.id == body.question_id))
+    question = res.scalar_one_or_none()
     if not question:
         raise HTTPException(404, "Question not found")
 
-    correct = body.answer == question.correct_answer
+    # Check correctness (numerical vs MCQ)
+    if question.question_type == "numerical":
+        correct = check_numerical(body.answer, question.correct_answer)
+    else:
+        correct = body.answer.strip().upper() == question.correct_answer.strip().upper()
+
+    # BKT update
+    old_mastery = await get_mastery(current_user.id, question.topic_id, db)
+    new_mastery = bkt_update(old_mastery, correct)
+    await save_mastery(current_user.id, question.topic_id, new_mastery, db)
 
     # Save attempt
-    attempt = Attempt(
+    db.add(Attempt(
         user_id=current_user.id,
         question_id=body.question_id,
         correct=correct,
         time_taken_sec=body.time_taken_sec,
         confidence=body.confidence,
-    )
-    db.add(attempt)
+    ))
 
-    # Update Bayesian Knowledge Tracing
-    old_mastery = await get_current_mastery(current_user.id, question.topic_id, db)
-    new_mastery = kt.update(old_mastery, correct)
-    await save_mastery(current_user.id, question.topic_id, new_mastery, db)
+    # XP calculation
+    diff_bonus  = int(question.difficulty * 10)
+    base_xp     = 10 if correct else 2
+    speed_bonus = 5 if body.time_taken_sec < 30 and correct else 0
+    conf_bonus  = 5 if (body.confidence or 0) >= 4 and correct else 0
+    xp_gained   = base_xp + diff_bonus + speed_bonus + conf_bonus
 
-    # Award XP
-    xp_gained = 10 if correct else 2
-    if body.confidence and correct and body.confidence >= 4:
-        xp_gained += 5  # bonus for confident correct answer
     current_user.xp += xp_gained
 
-    # Invalidate cached next question
-    await redis.delete(f"quiz:next:{current_user.id}:{question.topic_id}")
-    # Invalidate mastery cache
-    await redis.delete(f"mastery:{current_user.id}")
+    # Time rank
+    if body.time_taken_sec < 30:   time_rank = "fast"
+    elif body.time_taken_sec < 90: time_rank = "normal"
+    else:                          time_rank = "slow"
 
-    return SubmitResponse(
+    # Invalidate caches
+    await redis.delete(f"quiz:next:{current_user.id}:{question.topic_id}")
+    await redis.delete(f"mastery:{current_user.id}")
+    await redis.delete(f"heatmap:{current_user.id}")
+
+    return SubmitRes(
         correct=correct,
         correct_answer=question.correct_answer,
         explanation=question.explanation,
         new_mastery=round(new_mastery, 4),
         mastery_delta=round(new_mastery - old_mastery, 4),
         xp_gained=xp_gained,
+        time_rank=time_rank,
     )
 
 
-@router.get("/history", response_model=list[AttemptOut])
-async def get_history(
+@router.get("/history")
+async def history(
     limit: int = Query(20, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Attempt, Topic.name.label("topic_name"))
+    res = await db.execute(
+        select(Attempt, Topic.name.label("tn"), Question.difficulty)
         .join(Question, Attempt.question_id == Question.id)
         .join(Topic, Question.topic_id == Topic.id)
         .where(Attempt.user_id == current_user.id)
         .order_by(desc(Attempt.attempted_at))
         .limit(limit)
     )
-    rows = result.all()
     return [
-        AttemptOut(
-            question_id=r.Attempt.question_id,
-            topic_name=r.topic_name,
-            correct=r.Attempt.correct,
-            time_taken_sec=r.Attempt.time_taken_sec,
-            attempted_at=r.Attempt.attempted_at.isoformat(),
-        )
-        for r in rows
+        {
+            "question_id": r.Attempt.question_id,
+            "topic_name": r.tn,
+            "correct": r.Attempt.correct,
+            "time_taken_sec": r.Attempt.time_taken_sec,
+            "difficulty": r.difficulty,
+            "attempted_at": r.Attempt.attempted_at.isoformat(),
+        }
+        for r in res.all()
     ]

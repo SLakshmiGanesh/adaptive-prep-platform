@@ -1,131 +1,70 @@
-# 🧠 Adaptive Prep Platform — AI-Powered Personalized Learning Platform
+# 🧠 Adaptive Prep Platform v2 — Elite AI Learning Platform
 
-> A production-grade adaptive learning system for JEE, NEET, UPSC, and university exams.  
-> Built with Next.js · FastAPI · PostgreSQL · Redis · OpenAI · pgvector
-
----
-
-## 🏗️ Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                   FRONTEND (Next.js 14)                  │
-│  Dashboard · Quiz · AI Tutor · Auth · Analytics          │
-└────────────────────────┬────────────────────────────────┘
-                         │ REST + WebSocket
-┌────────────────────────▼────────────────────────────────┐
-│                API GATEWAY (FastAPI)                      │
-│  JWT Auth · Rate Limiting · Redis Event Bus              │
-└──┬──────────┬──────────┬──────────┬────────────┬────────┘
-   │          │          │          │            │
-   ▼          ▼          ▼          ▼            ▼
-  SKM      Recomm.   Spaced    Assessment    AI Tutor
-Bayesian   Engine     Rep       IRT Quiz      RAG+LLM
-  KT       Planner   SM-2      Selector      Pipeline
-   │          │          │          │            │
-   └──────────┴──────────┴──────────┴────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────┐
-│          DATABASE LAYER                                   │
-│  PostgreSQL + pgvector    Redis Cache + Pub/Sub          │
-└─────────────────────────────────────────────────────────┘
-```
+> Adaptive learning for **JEE · NEET · GATE · UPSC · CAT · GMAT · GRE · Semester**  
+> Powered by Bayesian Knowledge Tracing · IRT Quizzes · RAG AI Tutor · SM-2 Spaced Repetition
 
 ---
 
-## 📦 Tech Stack
+## ✨ What's New in v2
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| Frontend | Next.js 14 (App Router) | SSR, streaming, React Server Components |
-| Styling | Tailwind CSS + CSS Variables | Design system |
-| Backend | FastAPI (Python 3.11) | Async API, WebSocket support |
-| Auth | JWT + bcrypt | Stateless authentication |
-| Primary DB | PostgreSQL 16 | Relational data, attempts, sessions |
-| Vector DB | pgvector extension | Embedding similarity search (RAG) |
-| Cache | Redis 7 | Real-time recommendations, session cache |
-| AI/LLM | OpenAI GPT-4o-mini | Tutor responses |
-| Embeddings | text-embedding-3-small | Document + question embeddings |
-| Deployment | Vercel (FE) + Railway (BE) | Zero-downtime deploys |
+| Feature | Detail |
+|---------|--------|
+| **GATE Support** | Numerical answer type, engineering subjects, CS/EC/EE topics |
+| **Working AI Tutor** | Full SSE streaming with real OpenAI GPT-4o-mini + RAG retrieval |
+| **Self-Customizable Plan** | Add/remove topics, adjust time, toggle strategies, regenerate |
+| **Exam-specific prompts** | JEE, NEET, GATE, UPSC, CAT each get specialized tutoring style |
+| **Analytics page** | Radar charts, bar charts, subject breakdown, weakest/strongest topics |
+| **8 exam types** | JEE, NEET, GATE, UPSC, CAT, GMAT, GRE, Semester |
+| **Obsidian design system** | Phosphor green + dark void aesthetic, elite UI |
+| **Confidence intervals** | Score prediction with CI bounds + percentile |
+| **Topic search** | Full-text search when building custom plans |
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (5 minutes)
 
-### Prerequisites
+### 1. Prerequisites
+- Node.js 18+, Python 3.11+, Docker
 
-- Node.js 18+
-- Python 3.11+
-- PostgreSQL 16 with pgvector extension
-- Redis 7
-- OpenAI API key
-
-### 1. Clone & Install
-
+### 2. Clone & setup
 ```bash
-git clone https://github.com/yourname/adaptive-prep-platform
+git clone https://github.com/you/adaptive-prep-platform
 cd adaptive-prep-platform
 
-# Frontend
-cd frontend
-npm install
-
-# Backend
-cd ../backend
-python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+# Install everything
+make install
 ```
 
-### 2. Environment Variables
-
-**frontend/.env.local**
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_WS_URL=ws://localhost:8000
+### 3. Environment
+```bash
+cd backend
+cp .env.example .env
+# Edit .env — add your OPENAI_API_KEY (required for AI tutor)
 ```
-
-**backend/.env**
-```env
-DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/adaptiveprep
-REDIS_URL=redis://localhost:6379
-JWT_SECRET=your-super-secret-key-min-32-chars
-JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=10080
-OPENAI_API_KEY=sk-...
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-OPENAI_CHAT_MODEL=gpt-4o-mini
-ENVIRONMENT=development
-```
-
-### 3. Database Setup
 
 ```bash
-# Install pgvector
-psql -c "CREATE EXTENSION IF NOT EXISTS vector;"
-
-# Run migrations
-cd backend
-alembic upgrade head
-
-# Seed initial data
-python scripts/seed_topics.py
-python scripts/seed_questions.py
-```
-
-### 4. Run Development Servers
-
-```bash
-# Terminal 1 — Backend
-cd backend
-uvicorn main:app --reload --port 8000
-
-# Terminal 2 — Frontend
 cd frontend
-npm run dev
+cp .env.example .env.local
+# NEXT_PUBLIC_API_URL=http://localhost:8000 (already set)
 ```
 
-Open http://localhost:3000
+### 4. Start databases
+```bash
+make db       # starts PostgreSQL + Redis via Docker
+make migrate  # creates all tables
+make seed     # seeds 60+ topics for all exams
+```
+
+### 5. Run
+```bash
+# Terminal 1
+make dev       # FastAPI on :8000
+
+# Terminal 2
+make frontend  # Next.js on :3000
+```
+
+Open **http://localhost:3000** → Register → Choose your exam → Start studying
 
 ---
 
@@ -135,232 +74,202 @@ Open http://localhost:3000
 adaptive-prep-platform/
 ├── frontend/
 │   ├── app/
-│   │   ├── layout.tsx              # Root layout with providers
-│   │   ├── page.tsx                # Landing page
-│   │   ├── dashboard/page.tsx      # Main dashboard
-│   │   ├── quiz/page.tsx           # Adaptive quiz
-│   │   ├── tutor/page.tsx          # AI Tutor chat
-│   │   └── auth/page.tsx           # Login / Register
+│   │   ├── page.tsx               ← Landing page
+│   │   ├── auth/page.tsx          ← Login + 2-step register with exam picker
+│   │   ├── dashboard/page.tsx     ← Main command center
+│   │   ├── quiz/page.tsx          ← Adaptive quiz (MCQ + GATE numerical)
+│   │   ├── tutor/page.tsx         ← Streaming AI tutor (WORKING)
+│   │   ├── plan/page.tsx          ← Customizable study plan
+│   │   ├── revisions/page.tsx     ← SM-2 spaced repetition
+│   │   ├── analytics/page.tsx     ← Deep analytics with charts
+│   │   ├── leaderboard/page.tsx   ← Global XP rankings
+│   │   └── profile/page.tsx       ← Settings + exam config
 │   ├── components/
-│   │   ├── HeatMap.tsx             # Topic mastery visualization
-│   │   ├── StudyFeed.tsx           # Adaptive task feed
-│   │   ├── ProgressChart.tsx       # Performance over time
-│   │   └── QuizCard.tsx            # Quiz question card
-│   └── lib/
-│       └── api.ts                  # Typed API client
+│   │   ├── HeatMap.tsx            ← Topic mastery heatmap with tooltip
+│   │   ├── ProgressChart.tsx      ← Recharts area chart
+│   │   └── StudyFeed.tsx          ← Daily plan feed
+│   ├── lib/api.ts                 ← Typed API client + streaming tutor
+│   └── app/globals.css            ← Obsidian design system
 │
 ├── backend/
-│   ├── main.py                     # FastAPI app entry point
-│   ├── db.py                       # Async SQLAlchemy + Redis
-│   ├── requirements.txt
+│   ├── main.py                    ← FastAPI app
+│   ├── db.py                      ← Async PostgreSQL + Redis
+│   ├── models/orm.py              ← SQLAlchemy models
 │   ├── routers/
-│   │   ├── auth.py                 # Register, login, refresh
-│   │   ├── quiz.py                 # IRT quiz selection + submit
-│   │   ├── study_plan.py           # Daily plan generation
-│   │   └── tutor.py                # Streaming AI tutor
-│   ├── services/
-│   │   ├── skm.py                  # Bayesian Knowledge Tracing
-│   │   ├── recommender.py          # Study plan optimizer
-│   │   ├── spaced_rep.py           # SM-2 spaced repetition
-│   │   └── predictor.py            # Score prediction model
-│   └── models/
-│       └── orm.py                  # SQLAlchemy ORM models
+│   │   ├── auth.py                ← Register, login, JWT
+│   │   ├── quiz.py                ← IRT selection, BKT update, GATE numerical
+│   │   ├── study_plan.py          ← Plan builder, customize, complete
+│   │   ├── tutor.py               ← WORKING streaming RAG tutor
+│   │   ├── analytics.py           ← Heatmap, prediction, trends
+│   │   ├── gamification.py        ← XP, levels, badges, leaderboard
+│   │   └── topics.py              ← Topic listing, search, mastery
+│   └── scripts/
+│       └── seed_all_exams.py      ← 60+ topics across all 8 exams
 │
-└── ai/
-    ├── knowledge_model/
-    │   └── bayesian_kt.py          # Full BKT implementation
-    ├── recommendation/
-    │   └── engine.py               # Priority scoring engine
-    ├── tutor/
-    │   ├── rag.py                  # RAG pipeline
-    │   └── embeddings.py           # Embedding utilities
-    └── assessment/
-        └── irt.py                  # Item Response Theory
+└── docker-compose.yml
 ```
 
 ---
 
-## 🧠 AI Engine — How It Works
+## 🤖 AI Tutor Setup
 
-### Student Knowledge Model (SKM)
+The tutor requires an OpenAI API key. It works with:
+- `gpt-4o-mini` (recommended — cheap + fast)
+- `gpt-4o` (more powerful)
+- Any OpenAI-compatible endpoint
 
-Each student is represented as a vector of topic mastery scores (0–1):
-
-```
-Student = {
-  "Thermodynamics":  0.72,
-  "Kinematics":      0.45,
-  "Organic Chem":    0.31,
-  "Calculus":        0.88,
-  ...
-}
+```env
+OPENAI_API_KEY=sk-proj-...
+OPENAI_CHAT_MODEL=gpt-4o-mini
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
-Mastery updates after every quiz attempt using **Bayesian Knowledge Tracing**:
-
-```
-P(known | correct) = P(correct | known) × P(known)
-                     ─────────────────────────────
-                           P(correct)
-```
-
-### Spaced Repetition (SM-2)
-
-Revision intervals grow exponentially based on recall quality:
-- Quality 5 (perfect): interval × ease_factor
-- Quality 3 (pass): shorter interval
-- Quality < 3 (fail): reset to 1 day
-
-### IRT Question Selection
-
-Questions are selected to maximize **Fisher Information** at the student's current ability level. The optimal question is at difficulty = student ability (50% success probability).
-
-### RAG Tutor Pipeline
-
-```
-User question
-     ↓
-Embed with text-embedding-3-small
-     ↓
-pgvector similarity search (top-3 chunks)
-     ↓
-Inject context into GPT-4o-mini prompt
-     ↓
-Stream response to frontend
+**Adding your study materials to RAG:**
+```bash
+cd backend
+python -m scripts.ingest_docs \
+  --file /path/to/ncert_physics_ch12.txt \
+  --source "NCERT Physics Ch12" \
+  --topic-id <uuid-from-db>
 ```
 
 ---
 
-## 🗄️ Database Schema
-
-See `backend/models/orm.py` for full SQLAlchemy models.
-
-Key tables:
-- `users` — profiles, exam targets, exam dates
-- `topics` — hierarchical subject tree
-- `questions` — with IRT params and embeddings
-- `attempts` — every quiz answer with timing
-- `mastery_snapshots` — time-series of mastery per topic
-- `revision_schedule` — SM-2 computed next-review dates
-- `study_sessions` — logged study time
-- `predictions` — score forecasts
-
----
-
-## 🔌 API Reference
+## 📡 API Reference
 
 ### Auth
 ```
-POST /auth/register     { email, password, name, exam_target, exam_date }
-POST /auth/login        { email, password } → { access_token }
-GET  /auth/me           → UserProfile
+POST /auth/register   { email, password, name, exam_target, exam_date, weekly_goal_hours }
+POST /auth/login      { username, password } → { access_token }
+GET  /auth/me         → UserProfile
 ```
 
 ### Quiz
 ```
-GET  /quiz/next?topic_id=   → Question (IRT-selected)
-POST /quiz/submit           { question_id, answer, time_taken_sec, confidence }
-GET  /quiz/history          → [Attempt]
+GET  /quiz/next?topic_id=  → Question (IRT-selected, supports numerical for GATE)
+POST /quiz/submit          { question_id, answer, time_taken_sec, confidence }
+GET  /quiz/history         → [Attempt]
 ```
 
 ### Study Plan
 ```
-GET  /plan/today            → [{ topic, duration_min, type, priority }]
-POST /plan/complete         { topic_id, duration_min }
-GET  /plan/revisions        → [{ topic, due_date, interval_days }]
+GET  /plan/today?hours=4         → [PlanItem] (priority-scored)
+POST /plan/customize             { topic_ids, hours, focus_weak, include_revisions }
+POST /plan/complete              { topic_id, duration_min }
+PATCH /plan/goal                 { weekly_goal_hours }
+GET  /plan/revisions             → [RevisionItem]
 ```
 
-### Tutor (Streaming)
+### AI Tutor (SSE)
 ```
-POST /tutor/ask             { question, topic_id } → SSE stream
-GET  /tutor/history         → [{ question, answer, timestamp }]
+POST /tutor/ask    { question, topic_id?, topic_name?, exam_target?, history[] }
+     → text/event-stream   data: chunk\n\n  ...  data: [SOURCES][...]\n\n
+GET  /tutor/history → [{ question, topic, timestamp }]
 ```
 
 ### Analytics
 ```
-GET  /analytics/mastery     → [{ topic, mastery, trend, last_updated }]
-GET  /analytics/predict     → { score, weak_topics, strong_topics }
-GET  /analytics/heatmap     → [{ topic, subject, mastery, attempts }]
+GET  /analytics/heatmap        → [HeatCell] (topic mastery matrix)
+GET  /analytics/predict        → PredictionOut (score + CI + percentile)
+GET  /analytics/mastery-trend  → [MasteryTrend]
+GET  /analytics/subjects       → [{ subject, topic_count }]
+```
+
+### Topics
+```
+GET  /topics               → [Topic] filtered by exam_target
+GET  /topics/search?q=     → [Topic] full-text search
+GET  /topics/mastery       → [{ id, name, subject, mastery }]
+```
+
+### Gamification
+```
+GET  /gamification/stats        → { xp, level, streak, accuracy, badges }
+GET  /gamification/badges       → [{ id, name, icon, earned }]
+GET  /gamification/leaderboard  → [{ rank, name, xp, level }]
 ```
 
 ---
 
-## 🚢 Deployment
+## 🎨 Design System
+
+The UI uses the **Obsidian Intelligence** design system:
+
+- **Background**: Near-black void (#050507)
+- **Accent**: Phosphor Green (#00ff88) — the color of intelligence
+- **Secondary**: Electric Violet (#7c3aed)
+- **Font**: Geist (UI) + Instrument Serif (content) + Geist Mono (numbers)
+- **Grid background**: Subtle phosphor grid lines
+- **Glow effects**: Contextual box-shadows on active elements
+
+All CSS variables are in `frontend/app/globals.css`.
+
+---
+
+## 🏗️ Deployment
 
 ### Vercel (Frontend)
-
 ```bash
 cd frontend
 npx vercel --prod
+# Set NEXT_PUBLIC_API_URL to your Railway backend URL
 ```
-
-Set env vars in Vercel dashboard:
-- `NEXT_PUBLIC_API_URL` → your Railway backend URL
 
 ### Railway (Backend)
-
 ```bash
-# Install Railway CLI
-npm i -g @railway/cli
-railway login
-
 cd backend
-railway init
-railway up
-```
-
-Add env vars in Railway dashboard. Railway auto-detects Python and runs `uvicorn`.
-
-**railway.toml:**
-```toml
-[build]
-builder = "NIXPACKS"
-
-[deploy]
-startCommand = "uvicorn main:app --host 0.0.0.0 --port $PORT --workers 2"
-healthcheckPath = "/health"
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 3
+railway login && railway init && railway up
+# Add env vars in Railway dashboard
+# Add PostgreSQL and Redis services
 ```
 
 ---
 
-## 🧪 Testing
+## 📊 Exam Configuration
 
-```bash
-# Backend tests
-cd backend
-pytest tests/ -v --asyncio-mode=auto
+| Exam | Max Score | Marking | Subjects |
+|------|-----------|---------|----------|
+| JEE | 360 | +4/-1 | Physics, Chemistry, Math |
+| NEET | 720 | +4/-1 | Physics, Chemistry, Biology |
+| GATE | 100 | +1/-0.33 | Core subject + Engg Maths + Aptitude |
+| UPSC | 200 | +2/-0.66 | GS 1-4 + CSAT |
+| CAT | 300 | +3/-1 | VARC + DILR + QA |
+| GMAT | 800 | +1/0 | Verbal + Quant + IR + AWA |
+| GRE | 340 | +1/0 | Verbal + Quant + AWA |
+| Semester | 100 | +1/0 | Core subjects |
 
-# Frontend
-cd frontend
-npm run test
-npm run type-check
+---
+
+## 🔬 AI/ML Algorithms
+
+### Bayesian Knowledge Tracing
+```
+P(known | correct) = P(correct|known) × P(known) / P(correct)
+P(known_new) = P(known_posterior) + (1 - P(known_posterior)) × P_learn
 ```
 
----
+### IRT Question Selection (2PL)
+```
+P(correct | θ, a, b) = 1 / (1 + e^(-a(θ - b)))
+Fisher Info I(θ) = a² × P × (1 - P)   → maximize this
+```
 
-## 📈 Phase Roadmap
+### SM-2 Spaced Repetition
+```
+If quality ≥ 3:  interval_n = interval_{n-1} × EF
+                 EF = EF + 0.1 - (5-q)(0.08 + (5-q)×0.02)
+Else:           interval = 1, reset repetitions
+```
 
-| Phase | Duration | Features |
-|-------|----------|----------|
-| **Phase 1 — MVP** | Week 1–2 | Auth, static quiz, basic dashboard |
-| **Phase 2 — Intelligence** | Week 3–4 | BKT mastery, recommendations, adaptive quiz |
-| **Phase 3 — AI Tutor** | Week 5 | RAG pipeline, streaming LLM, history |
-| **Phase 4 — Optimization** | Week 6 | Spaced repetition, score prediction, polish |
-
----
-
-## 🏆 Elite Differentiators
-
-- [ ] Reinforcement learning for plan optimization (future)
-- [ ] Gamification: XP, streaks, leaderboard
-- [ ] Multi-cohort comparison (percentile ranks)
-- [ ] Voice AI tutor (Web Speech API + TTS)
-- [ ] Offline-first PWA (service workers)
+### Score Prediction
+```
+p_correct = weighted_mastery_across_topics
+raw_score = p_correct × correct_mark + (1-p_correct)×0.45 × wrong_mark
+predicted  = (raw_score / correct_mark) × max_score
+```
 
 ---
 
 ## 📜 License
 
-MIT — build freely, credit appreciated.
+MIT — build freely.

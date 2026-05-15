@@ -1,5 +1,5 @@
 """
-db.py — Async database connections: PostgreSQL + Redis
+db.py — Async database: PostgreSQL + Redis
 """
 
 from typing import AsyncGenerator
@@ -10,12 +10,12 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str
-    REDIS_URL: str
-    JWT_SECRET: str
+    DATABASE_URL: str = "postgresql+asyncpg://learning:learning@localhost:5432/adaptiveprep"
+    REDIS_URL: str = "redis://localhost:6379"
+    JWT_SECRET: str = "change-me-min-32-chars-in-production"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
-    OPENAI_API_KEY: str
+    OPENAI_API_KEY: str = ""
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_CHAT_MODEL: str = "gpt-4o-mini"
     ENVIRONMENT: str = "development"
@@ -37,9 +37,7 @@ engine = create_async_engine(
 )
 
 AsyncSessionLocal = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
+    engine, class_=AsyncSession, expire_on_commit=False
 )
 
 
@@ -61,22 +59,20 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 # ── Redis ──────────────────────────────────────────────────────────────────────
 
-_redis_client: aioredis.Redis | None = None
+_redis: aioredis.Redis | None = None
 
 
 async def get_redis() -> aioredis.Redis:
-    global _redis_client
-    if _redis_client is None:
-        _redis_client = await aioredis.from_url(
-            settings.REDIS_URL,
-            encoding="utf-8",
-            decode_responses=True,
+    global _redis
+    if _redis is None:
+        _redis = await aioredis.from_url(
+            settings.REDIS_URL, encoding="utf-8", decode_responses=True
         )
-    return _redis_client
+    return _redis
 
 
 async def close_redis() -> None:
-    global _redis_client
-    if _redis_client:
-        await _redis_client.aclose()
-        _redis_client = None
+    global _redis
+    if _redis:
+        await _redis.aclose()
+        _redis = None

@@ -1,58 +1,21 @@
-# Python
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-.Python
-*.egg-info/
-dist/
-build/
 .venv/
 venv/
-env/
-*.egg
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# Environment
 .env
 .env.local
 .env.production
 !.env.example
-
-# Node / Next.js
 node_modules/
 .next/
 out/
 .vercel/
 *.tsbuildinfo
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Database
-*.db
-*.sqlite3
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
 .DS_Store
-
-# Docker
-.docker/
-
-# Logs
 *.log
-logs/
-
-# Coverage
 .coverage
 htmlcov/
-coverage.xml
-
-# Railway
+.pytest_cache/
 .railway/
+pgdata/
+redisdata/
